@@ -147,7 +147,7 @@ class Ads1115 :
                 FSR_value = float( FSR_value.replace("V", "") )#removing 'V' in FSR
                 return FSR_value
 
-            return (read_raw_data()/(2**15))*current_FSR()
+            return (read_raw_data()/(2**16-1))*current_FSR()
         
         except :
              print ("Error has accured during reading the conversion register of the ADC")
