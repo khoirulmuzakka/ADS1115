@@ -1,6 +1,7 @@
 import smbus
 import time
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+import numpy as np
 
 """Device Address"""
 address_list = [0x48, 0x49, 0x4A, 0x4B]
@@ -103,7 +104,7 @@ def reset (address= 0x48):
 
 """ ADS1115 class"""
 class Ads1115(object) :
-    def __init__(self, address = 0x48, channel = '100', FSR ="010", mode = "1", data_rate = "100"):
+    def __init__(self, address = 0x48, channel = '100', FSR ="000", mode = "1", data_rate = "100"):
         self.address = address
         self.channel = channel
         self.FSR = FSR
@@ -139,14 +140,15 @@ class Ads1115(object) :
     """read hex raw data output from ads1115 """
     def read_raw_data(self):
         try :
+            self.write_config()
             raw_data = bus.read_word_data(self.address, pointer_conversion) & 0xFFFF
             return (raw_data >> 8) | ((raw_data & 0xFF) << 8) #swapping byte order
         except :
             print ("Error has accured during reading the conversion register of the ADC")   
+            
    
-
-    """Conversion Result"""
-    def read(self):
+    """Conversion Result without writing config during before reading : useful in continous mode"""
+    def just_read(self):
         try :       
             """selecting FSR key that has FSR value given by FSR"""
             def current_FSR ():
@@ -167,19 +169,66 @@ class Ads1115(object) :
         except :
              print ("Error has accured during reading the conversion register of the ADC")
              
+    
+    """ Read the conversion result"""         
+    def read(self) :
+        try :
+            """writing configuration register """
+            self.write_config()
+            
+            """selecting FSR key that has FSR value given by FSR"""
+            def current_FSR ():
+                for key, value in FSR_list.items():
+                    if key == self.FSR :
+                        FSR_value = value
+                return FSR_value
+            
+            """Converting from binary two complement to signed integers"""
+            def value ():
+                if self.read_raw_data() & 0x8000 != 0:
+                    return self.read_raw_data()- (1 << 16)
+                else :
+                    return self.read_raw_data()
+                
+            return (value()/(2**15))*current_FSR()
+        
+        except :
+             print ("Error has accured during reading the conversion register of the ADC")
+        
+
+           
     def histogram(self, number_of_samples = 200, bins =50 ):
         samples=[]
         for i in range(1,number_of_samples) :
-            sample = self.read()
+            sample = self.read_raw_data()
             #Data rate in SPS
             for key, value in data_rate_list.items():
                 if key == self.data_rate:
                     data_rate_value = value
             time.sleep(1/data_rate_value +0.0001)
             samples.append(sample)
+            
+        mean_raw_data = sum(samples)/number_of_samples
+        print (" Mean of Raw Data : {0}".format(mean_raw_data))
+
+        RMS = np.sqrt(sum(np.square([float(i) for i in samples]))/number_of_samples)
+        print ("RMS : {0}".format(RMS))
+        
+        std = np.std([float(i) for i in samples])
+        print ("Standard Deviation : {}".format(std))
     
         plt.hist(samples, bins)
+        plt.title (" ADS1115 Histogram")
+        plt.xlabel ("Raw Data")
         plt.show()
+
+        
+
+        
+
+    
+        
+        
              
              
     
