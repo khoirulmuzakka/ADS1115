@@ -1,3 +1,13 @@
+"""
+Created on Fri Nov 16 10:25:43 2018
+
+@author: khoirul_muzakka
+"""
+
+
+
+
+
 import smbus
 import time
 import matplotlib.pyplot as plt
@@ -48,8 +58,10 @@ data_rate_list = {"000" : 8,
 
 bus = smbus.SMBus(1)
 
-"""Reading configuration register"""
+
 def read_config(address = 0x48):
+    """Read the configuration register of ADS1115. The sole argument of this function is Address.""" 
+
     try :
         assert address in address_list
         
@@ -87,8 +99,9 @@ def read_config(address = 0x48):
         print ("Error has accoured during reading the configuration register of the ADC")
         
         
-""" Go back to default setting, can be used to stop ADC from converting in continous mode"""     
+    
 def reset (address= 0x48):
+    """ Go back to default setting, can be used to stop ADC from converting in continous mode""" 
     try :
         assert address in address_list
         def_config = 0x4583 #channel = 100, FSR = 010, mode =1, data_rate = 100
@@ -104,6 +117,7 @@ def reset (address= 0x48):
 
 """ ADS1115 class"""
 class Ads1115(object) :
+    """ When make an instance from this class, configuration register is automatically written to the ADS1115"""
     def __init__(self, address = 0x48, channel = '100', FSR ="000", mode = "1", data_rate = "100"):
         self.address = address
         self.channel = channel
@@ -120,77 +134,75 @@ class Ads1115(object) :
             
         except AssertionError :
             print ("Please enter correct values for the arguments. Note that Channel, FSR, mode, and data rate take string values, for example '100'")
-            
+
+        self.__write_config()
+
+      
+    def __current_FSR_value(self):
+        """Find FSR value given the FSR input""" 
+        for key, value in FSR_list.items():
+            if key == self.FSR :
+                return value
+               
+    
+    
+    def __data_rate_value (self) :
+        """find data rate given data rate input """
+        for key, value in data_rate_list.items():
+            if key == self.data_rate:
+                return value 
         
-    """writing the configuration register"""
-    def write_config(self):
+        
+    def __write_config(self):
+        """write the configuration register"""
         try :
             str_new_config = "0"+ self.channel+ self.FSR+self.mode+self.data_rate+"0"+"0"+"0"+"11"
             new_config = int(str_new_config, 2)
             bus.write_word_data(self.address, pointer_config, new_config) 
-            #Data rate in SPS
-            for key, value in data_rate_list.items():
-                if key == self.data_rate:
-                    data_rate_value = value
-            time.sleep(1/data_rate_value +0.0001) #to make sure that ADC has finished converting
+            time.sleep(1/self.__data_rate_value() +0.0001) 
         except :
             print ("Error has accoured during writing the configuration register to the ADC")
-            
 
-    """read hex raw data output from ads1115 """
+    
     def read_raw_data(self):
+        """read raw data output from ads1115 """
         try :
-            self.write_config()
+            self.__write_config()
             raw_data = bus.read_word_data(self.address, pointer_conversion) & 0xFFFF
             return (raw_data >> 8) | ((raw_data & 0xFF) << 8) #swapping byte order
         except :
             print ("Error has accured during reading the conversion register of the ADC")   
             
    
-    """Conversion Result without writing config during before reading : useful in continous mode"""
+    
     def just_read(self):
-        try :       
-            """selecting FSR key that has FSR value given by FSR"""
-            def current_FSR ():
-                for key, value in FSR_list.items():
-                    if key == self.FSR :
-                        FSR_value = value
-                return FSR_value
-            
-            """Converting from binary two complement to signed integers"""
+        """Conversion Result without writing config during before reading : useful in continous mode"""
+        try :                   
+            #Converting from binary two complement to signed integers"""
             def value ():
                 if self.read_raw_data() & 0x8000 != 0:
                     return self.read_raw_data()- (1 << 16)
                 else :
                     return self.read_raw_data()
                 
-            return (value()/(2**15))*current_FSR()
+            return (value()/(2**15))*self.__current_FSR_value()
         
         except :
              print ("Error has accured during reading the conversion register of the ADC")
              
     
-    """ Read the conversion result"""         
+            
     def read(self) :
-        try :
-            """writing configuration register """
-            self.write_config()
-            
-            """selecting FSR key that has FSR value given by FSR"""
-            def current_FSR ():
-                for key, value in FSR_list.items():
-                    if key == self.FSR :
-                        FSR_value = value
-                return FSR_value
-            
-            """Converting from binary two complement to signed integers"""
+        """ Read the conversion result. The output is in Volts""" 
+        try :            
+            #Converting from binary two complement to signed integers"""
             def value ():
                 if self.read_raw_data() & 0x8000 != 0:
                     return self.read_raw_data()- (1 << 16)
                 else :
                     return self.read_raw_data()
                 
-            return (value()/(2**15))*current_FSR()
+            return (value()/(2**15))*self.__current_FSR_value()
         
         except :
              print ("Error has accured during reading the conversion register of the ADC")
@@ -198,14 +210,11 @@ class Ads1115(object) :
 
            
     def histogram(self, number_of_samples = 200, bins =50 ):
+        """Draw histogram"""
         samples=[]
         for i in range(1,number_of_samples) :
             sample = self.read_raw_data()
-            #Data rate in SPS
-            for key, value in data_rate_list.items():
-                if key == self.data_rate:
-                    data_rate_value = value
-            time.sleep(1/data_rate_value +0.0001)
+            time.sleep(1/self.__data_rate_value() +0.0001)
             samples.append(sample)
             
         mean_raw_data = sum(samples)/number_of_samples
